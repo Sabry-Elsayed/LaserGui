@@ -74,9 +74,9 @@ LR_DATA_CMD_ID  = 0x01
 LR_ERROR_CMD_ID = 0x00
 #############################################################################
 
-
 ######################### Laser Data Global Variables #######################
 LR_SINGLE_RANGING_CMD = [0xEE,0x16,0x02,0x03,0x02,0x05]
+LR_CONTINOUS_RANGING_CMD = [0xEE,0x16,0x02,0x03,0x04,0x07]
 target_type = 0
 no_of_target = 0
 distance_h = 0
@@ -88,7 +88,18 @@ FIRST_TARGET_MODE    = 1
 LAST_TARGET_MODE     = 2
 MULTIPLE_TARGET_MODE = 3
 ################################################################################
-Target_Mode = 2
+Target_Mode = 1
+############################################################
+def get_target_mode():
+    global Target_Mode
+
+    return Target_Mode
+###########################################################
+def set_target_mode(target_val):
+     global Target_Mode
+
+     Target_Mode = target_val
+############################################################
 # Target_Mode = 2
 # ######################## Configure Serial Paramters #########################
 uart_serial = serial.Serial('COM4', 9600, 8, 'N', 1 , timeout=.2) # open serial connection
@@ -188,7 +199,13 @@ def LR_ParseCMD(cmd_info):
      global Target_Mode
 
      target_type = (int( (cmd_info[5])   ,16) & 0x0f)
-     no_of_target = ((int( cmd_info[5] ,16) & 0xf0 ) >> 4) + 1
+
+     target_mode = get_target_mode()
+
+     if target_mode == MULTIPLE_TARGET_MODE:
+          no_of_target = ((int( cmd_info[5] ,16) & 0xf0 ) >> 4) + 1
+     else:
+          no_of_target = 1
 
      target_type_val = get_type_of_target(target_type)
 
@@ -216,6 +233,13 @@ def LR_Set_Single_Ranging_CMD():
      print("writing data to serial")
 
 
+# 0xEE 0x16 0x02 0x03 0x04 0x07
+########################################################################################################################################
+def LR_Set_Continous_Ranging_CMD():
+      WriteDataToSerialPort(LR_CONTINOUS_RANGING_CMD)
+      print(len(LR_CONTINOUS_RANGING_CMD))
+      print("writing LR_CONTINOUS_RANGING_CMD  to serial")
+
 ########################################################## Resceive Response ############################################################
 def LR_ReceiveResponse():
      global Target_Mode
@@ -238,7 +262,43 @@ def LR_ReceiveResponse():
                return None
      else:
           return None
-       
+#########################################################################################################################################
+def LR_ReceiveResponse_2():
+    global Target_Mode
+
+    response = []
+    in_waiting_val = uart_serial.in_waiting
+
+    while in_waiting_val > 0:
+        response = Read_Serial_Port(uart_serial, 1)
+        if response and response[0] == 0xEE:
+            break
+
+    if response and response[0] == 0xEE:
+        additional_response = Read_Serial_Port(uart_serial, 9)
+        if additional_response:
+            response = list(response)  # Convert to list if not already
+            response.extend(additional_response)
+        else:
+            return None  # If we fail to read the additional bytes, return None
+    else:
+        return None  # If the start byte is not found, return None
+
+    if response:
+        temp = [hex(item) for item in response]
+
+        print(temp)
+        retState = check_cmd(temp)
+        print("ret stat =", retState)
+        if retState:
+            retDistance = LR_ParseCMD(temp)
+            return retDistance
+        else:
+            return None
+    else:
+        return None
+
+
 ##########################################################################################################################################
 Target_Type_ACK_Frame=[0xEE, 0x16 , 0x02 , 0x03 , 0x03 , 0x06]
 def Check_Recieve_Target_Type_ACK(response):
@@ -255,6 +315,3 @@ def LR_Recieve_Target_Type_ACK():
           return retstat
      return None
 
-
-l = ["hello" , 5 , 20.5]
-print(l)
